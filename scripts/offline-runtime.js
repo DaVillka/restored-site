@@ -4,6 +4,7 @@
     const missingAssetPaths = new Set(OFFLINE.missingAssetPaths);
     missingAssetPaths.delete("/chat/avatar.png");
     missingAssetPaths.delete("/chat/user.png");
+    missingAssetPaths.delete("/fire-1000.png");
     window.__OFFLINE_MISSING_ASSET_PATHS__ = missingAssetPaths;
 
     const noop = () => undefined;

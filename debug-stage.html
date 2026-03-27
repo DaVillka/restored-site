@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
+    />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta name="theme-color" content="#00ebdb" />
+    <title>Debug Stage | LitEnergy</title>
+    <link rel="stylesheet" href="fonts/fonts.css" />
+    <link rel="stylesheet" href="styles/google-fonts.css" />
+    <link rel="stylesheet" href="assets/index-XXXyNkfI.css" />
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const route = params.get("route") || "/payment";
+      const paymentStage = Number(params.get("payment_stage") || 0);
+      const startChatStage = Number(params.get("start_chat_stage") || 0);
+      const checkingStage = Number(params.get("checking_stage") || 0);
+      const withdrawalChatStage = Number(params.get("withdrawal_chat_stage") || 0);
+      const bankCommissionStage = Number(params.get("bank_commission_stage") || 0);
+      const signatureStage = Number(params.get("signature_stage") || 0);
+      const cardNumber = params.get("card_number") || "";
+      const balance = Number(params.get("balance") || 714000);
+      const availableSpins = Number(params.get("available_spins") || 0);
+
+      const storage = {
+        session: {
+          startFlow: {
+            key: "__HAR_OFFLINE_STATE_V3_START_FLOW__",
+            value: {
+              auth: {
+                access_token: "offline-access-token",
+                refresh_token: "offline-refresh-token",
+              },
+              me: {
+                balance,
+                available_spins: availableSpins,
+                gift_expires_at: "2026-03-26T20:12:03.391487",
+                card_number: cardNumber,
+              },
+              stages: {
+                payment_stage: paymentStage,
+                start_chat_stage: startChatStage,
+                checking_stage: checkingStage,
+                withdrawal_chat_stage: withdrawalChatStage,
+                bank_commission_stage: bankCommissionStage,
+                signature_stage: signatureStage,
+              },
+              currentResult: {
+                spin: "714_000",
+                amount: 714000,
+              },
+              resultConsumed: true,
+              spinFinished: true,
+              chatReplyIndex: 0,
+            },
+          },
+        },
+      };
+      window.__HAR_OFFLINE_STORAGE__ = storage;
+
+      sessionStorage.setItem(
+        storage.session.startFlow.key,
+        JSON.stringify(storage.session.startFlow.value),
+      );
+
+      history.replaceState(null, "", route + window.location.hash);
+      window.__debugStageRoute = route;
+    </script>
+    <script src="scripts/offline-runtime.js"></script>
+    <script type="module" src="assets/index-klNUxud8.js"></script>
+    <script>
+      window.addEventListener("load", () => {
+        setTimeout(() => {
+          history.pushState(null, "", window.__debugStageRoute + window.location.hash);
+          window.dispatchEvent(new PopStateEvent("popstate"));
+        }, 100);
+      });
+    </script>
+  </head>
+  <body class="bg-[#00EBDB]">
+    <div id="root"></div>
+  </body>
+</html>

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>External Link Stub</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #121212;
+        --card: #1e1e1e;
+        --accent: #00ebdb;
+        --muted: #9ca3af;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top, rgba(0, 235, 219, 0.14), transparent 32%),
+          linear-gradient(180deg, #181818, #0b0b0b);
+        color: #fff;
+        font-family: "Exo 2", Arial, sans-serif;
+      }
+      main {
+        width: min(92vw, 680px);
+        padding: 28px;
+        border-radius: 24px;
+        background: rgba(30, 30, 30, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      }
+      h1 { margin: 0 0 12px; font-size: 28px; }
+      p { margin: 0 0 12px; color: var(--muted); line-height: 1.5; }
+      code {
+        display: block;
+        margin: 18px 0;
+        padding: 16px;
+        border-radius: 16px;
+        background: #101010;
+        color: var(--accent);
+        word-break: break-all;
+        white-space: pre-wrap;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 20px;
+      }
+      a, button {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        background: var(--accent);
+        color: #111;
+        cursor: pointer;
+        text-decoration: none;
+        font: inherit;
+        font-weight: 700;
+      }
+      .secondary {
+        background: transparent;
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Внешняя ссылка заменена заглушкой</h1>
+      <p>Эта статическая копия не открывает внешние Telegram/HTTP-ссылки автоматически.</p>
+      <p>Исходный URL, захваченный фронтендом:</p>
+      <code id="url">Link not provided</code>
+      <div class="actions">
+        <button type="button" onclick="history.back()">Назад</button>
+        <a class="secondary" id="open" href="#" rel="noreferrer noopener" target="_blank">Открыть вручную</a>
+      </div>
+    </main>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const url = params.get("url") || "";
+      document.getElementById("url").textContent = url || "Link not provided";
+      document.getElementById("open").href = url || "#";
+      if (!url) {
+        document.getElementById("open").setAttribute("aria-disabled", "true");
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,35 @@
+/** Bounded - Black **/
+@font-face {
+    font-family: "Bounded";
+    src: url("./Bounded-Black.ttf") format("truetype");
+    font-weight: 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+/** Bounded - ExtraLight (missing in HAR, mapped to regular) **/
+@font-face {
+    font-family: "Bounded";
+    src: url("./Bounded-Regular.ttf") format("truetype");
+    font-weight: 200;
+    font-style: normal;
+    font-display: swap;
+}
+
+/** Bounded - Regular **/
+@font-face {
+    font-family: "Bounded";
+    src: url("./Bounded-Regular.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+/** Bounded - Variable (missing in HAR, mapped to regular) **/
+@font-face {
+    font-family: "BoundedVariable";
+    src: url("./Bounded-Regular.ttf") format("truetype");
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}

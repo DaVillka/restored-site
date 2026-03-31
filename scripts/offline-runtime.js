@@ -77,6 +77,64 @@
 
     const CHAT_COLORS = ["pink", "blue", "purple", "lime"];
 
+    const CHAT_SEED_POSITION_KEY = "__HAR_OFFLINE_SEED_POSITION__";
+
+    function trackChatSeedMessages(messages) {
+        if (!messages || !messages.length) {
+            return messages;
+        }
+
+        const total = messages.length;
+
+        // br.isSupported() returns false in offline mode, so the app always calls
+        // n(0) and t starts at 0 every reload — cloud storage is never read.
+        // Solution: rotate the array so Dc[0] is the next unseen message.
+        let startIdx = 0;
+        try {
+            const saved = localStorage.getItem(CHAT_SEED_POSITION_KEY);
+            if (saved !== null) {
+                const parsed = parseInt(saved, 10);
+                if (!isNaN(parsed) && parsed >= 0) {
+                    startIdx = (parsed + 1) % total;
+                }
+            }
+        } catch (error) {
+            // Ignore storage failures.
+        }
+
+        console.log("[HAR-CHAT] Старт. Всего:", total, "| lastSaved:", localStorage.getItem(CHAT_SEED_POSITION_KEY), "| startIdx:", startIdx);
+
+        const rotated = startIdx > 0
+            ? messages.slice(startIdx).concat(messages.slice(0, startIdx))
+            : messages;
+
+        // Proxy saves the absolute position on every direct element access.
+        // "find" is intercepted and runs on the raw array so replyId lookups
+        // do not overwrite the saved position with a wrong index.
+        return new Proxy(rotated, {
+            get(target, prop) {
+                if (prop === "find") {
+                    return function proxyFind(predicate, thisArg) {
+                        return Array.prototype.find.call(target, predicate, thisArg);
+                    };
+                }
+                if (typeof prop === "string") {
+                    const relIdx = parseInt(prop, 10);
+                    if (!isNaN(relIdx) && relIdx >= 0 && relIdx < target.length) {
+                        const absIdx = (startIdx + relIdx) % total;
+                        try {
+                            localStorage.setItem(CHAT_SEED_POSITION_KEY, String(absIdx));
+                            console.log("[HAR-CHAT] [" + relIdx + "] abs=" + absIdx + " " + target[relIdx].author + ": " + target[relIdx].text.slice(0, 40));
+                        } catch (error) {
+                            // Ignore storage failures.
+                        }
+                    }
+                }
+                return target[prop];
+            },
+        });
+    }
+
     function getRuntimeAssetUrl(pathname) {
         const currentScript = document.currentScript;
         if (currentScript && currentScript.src) {
@@ -185,7 +243,7 @@
         return null;
     }
 
-    window.__HAR_CHAT_SEED_MESSAGES__ = loadChatSeedMessages();
+    window.__HAR_CHAT_SEED_MESSAGES__ = trackChatSeedMessages(loadChatSeedMessages());
 
     function buildInitialState() {
         return clone(STORAGE.session.startFlow.defaults);

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(grep -o \"HAR_CHAT_SEED_MESSAGES.\\\\{0,300\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"chat-index.\\\\{0,500\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"getItem.*chat-index.\\\\{0,600\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"chat-index.\\\\{0,50\\\\}ifAvailable.\\\\{0,200\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"\\\\.setItem\\\\b.\\\\{0,400\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \".\\\\{0,50\\\\}br\\\\.getItem\\\\|.\\\\{0,50\\\\}br\\\\.setItem\\\\|.\\\\{0,50\\\\}=br[,;{]\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"br=.\\\\{0,200\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"nM=.\\\\{0,200\\\\}\\\\|Jc=.\\\\{0,200\\\\}\\\\|E2=.\\\\{0,200\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"S2=.\\\\{0,200\\\\}\\\\|zf=.\\\\{0,100\\\\}\\\\|function zf.\\\\{0,200\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")"
+    ]
+  }
+}

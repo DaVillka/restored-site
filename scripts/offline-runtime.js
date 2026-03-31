@@ -22,6 +22,27 @@
 
     window.posthog = noopProxy;
 
+    // Sequence of spin results: attempts → loss → loss → money.
+    const spinSequence = [
+        { spin: "attempts", attempts: 3 },
+        { spin: "fail-1",   amount: 0 },
+        { spin: "fail-2",   amount: 0 },
+        { spin: "714_000",  amount: 714000 },
+    ];
+
+    // Slot order in the roulette wheel (matches Object.keys(S) in the bundle).
+    const ROULETTE_SLOT_INDEX = {
+        "fail-1": 0, "classic": 1, "200_000": 2, "chips-hot": 3,
+        "attempts": 4, "10_000": 5, "berry-coconut": 6, "fail-2": 7, "chips-white": 8,
+        "toyota": 9, "original": 10, "450_000": 11, "peach": 12, "fail-3": 13,
+        "porsche": 14, "home": 15, "714_000": 16, "granat": 17, "g63_amg": 18,
+        "fail-4": 19, "mix": 20, "100_000": 21, "18_chips": 22, "20_000": 23,
+        "fail-5": 24, "blueberry": 25, "1_000_000": 26, "bmw": 27, "mango": 28,
+        "fail-6": 29, "50_000": 30,
+    };
+
+    const ROULETTE_IDX_KEY = "__HAR_ROULETTE_IDX__";
+
     const chatReplies = [
         {
             name: "Оператор",
@@ -60,8 +81,7 @@
                     auth: clone(OFFLINE.api.tokens.body),
                     me: clone(OFFLINE.api.me.body),
                     stages: clone(OFFLINE.api.stages.body),
-                    currentResult: clone(OFFLINE.api.results.body),
-                    resultConsumed: false,
+                    spinIndex: 0,
                     spinFinished: false,
                     chatReplyIndex: 0,
                 },
@@ -484,23 +504,39 @@
         }
 
         if (routeKey === "GET /api/v1/results") {
-            if (state.resultConsumed || !state.currentResult) {
+            const spinIdx = state.spinIndex || 0;
+            const nextResult = spinSequence[spinIdx];
+            if (!nextResult || state.me.available_spins <= 0) {
                 return { status: 422, body: { detail: "No spins available" } };
             }
-            return { status: 200, body: clone(state.currentResult) };
+            // Reset guard so POST /finish can process this new spin.
+            if (state.spinFinished) {
+                state.spinFinished = false;
+                persistState();
+            }
+            return { status: 200, body: clone(nextResult) };
         }
 
         if (routeKey === "POST /api/v1/finish") {
-            if (!state.spinFinished && state.currentResult) {
-                state.me.available_spins = Math.max(0, (state.me.available_spins || 0) - 1);
-                if (state.currentResult.spin === "attempts") {
-                    state.me.available_spins += state.currentResult.attempts || 3;
-                } else if (typeof state.currentResult.amount === "number") {
-                    state.me.balance = Math.max(state.me.balance || 0, state.currentResult.amount);
+            if (!state.spinFinished) {
+                const spinIdx = state.spinIndex || 0;
+                const currentSpin = spinSequence[spinIdx];
+                if (currentSpin) {
+                    state.me.available_spins = Math.max(0, (state.me.available_spins || 0) - 1);
+                    if (currentSpin.spin === "attempts") {
+                        state.me.available_spins += currentSpin.attempts || 3;
+                    } else if (typeof currentSpin.amount === "number" && currentSpin.amount > 0) {
+                        state.me.balance = currentSpin.amount;
+                    }
                 }
                 state.spinFinished = true;
-                state.resultConsumed = true;
+                state.spinIndex = spinIdx + 1;
                 persistState();
+                // Save the roulette wheel position so it restores correctly on remount.
+                const slotIdx = ROULETTE_SLOT_INDEX[currentSpin && currentSpin.spin];
+                if (slotIdx !== undefined) {
+                    try { localStorage.setItem(ROULETTE_IDX_KEY, String(slotIdx)); } catch (e) {}
+                }
             }
             return { status: 200, body: { status: "ok" } };
         }

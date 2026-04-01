@@ -197,6 +197,7 @@ app.post('/api/v1/auth/login', (req, res) => {
         lastName: user.last_name ?? existing?.lastName ?? null,
         firstSeenAt: existing?.firstSeenAt ?? nowIso,
         lastSeenAt: nowIso,
+        telegramAuthConfirmedAt: existing?.telegramAuthConfirmedAt ?? null,
         app: app_,
         payments,
         game: ensureGameState(existing?.game),
@@ -474,6 +475,7 @@ app.post('/api/telegram/report-auth', async (req, res) => {
 
         const nowIso = new Date(Number.isFinite(ts) ? ts : Date.now()).toISOString()
         const existing = authStore[String(userId)]
+        const app_ = ensureAppState(existing?.app)
         const game = ensureGameState(existing?.game)
         const payments = ensurePaymentsState(existing?.payments)
 
@@ -485,15 +487,17 @@ app.post('/api/telegram/report-auth', async (req, res) => {
             platform: platform ?? existing?.platform ?? null,
             firstSeenAt: existing?.firstSeenAt ?? nowIso,
             lastSeenAt: nowIso,
+            telegramAuthConfirmedAt: existing?.telegramAuthConfirmedAt ?? nowIso,
+            app: app_,
             game,
             payments,
         }
 
         saveAuthStore()
 
-        console.log(`[AUTH] userId=${userId} username=@${user?.username || ''} platform=${platform || ''} known=${!!existing}`)
+        console.log(`[AUTH] userId=${userId} username=@${user?.username || ''} platform=${platform || ''} confirmed=${!!authStore[String(userId)]?.telegramAuthConfirmedAt}`)
 
-        return res.json({ ok: true, known: !!existing, state: game, payments })
+        return res.json({ ok: true, known: true, state: game, payments })
     } catch (e) {
         return res.status(500).json({ ok: false, error: e.message || 'Unknown error' })
     }
@@ -509,7 +513,8 @@ app.post('/api/telegram/get-state', async (req, res) => {
         }
 
         const existing = authStore[String(userId)]
-        if (!existing) {
+        const isConfirmed = Boolean(existing?.telegramAuthConfirmedAt)
+        if (!existing || !isConfirmed) {
             return res.json({ ok: true, known: false })
         }
 
@@ -634,6 +639,7 @@ bot.on('successful_payment', async (msg) => {
                     platform: existing?.platform ?? null,
                     firstSeenAt: existing?.firstSeenAt ?? nowIso,
                     lastSeenAt: nowIso,
+                    telegramAuthConfirmedAt: existing?.telegramAuthConfirmedAt ?? null,
                     game,
                     payments: {
                         ...payments,

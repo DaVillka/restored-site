@@ -624,13 +624,20 @@
         }
     }
 
-    // Extracts the Bearer token from fetch init headers.
-    function extractAccessToken(init) {
-        if (!init || !init.headers) return null;
-        const h = init.headers;
-        if (typeof h.get === "function") return (h.get("authorization") || h.get("Authorization") || "").replace(/^Bearer\s+/i, "") || null;
-        const raw = h["authorization"] || h["Authorization"] || "";
+    function extractAccessTokenFromHeaders(headers) {
+        if (!headers) return null;
+        if (typeof headers.get === "function") {
+            return (headers.get("authorization") || headers.get("Authorization") || "").replace(/^Bearer\s+/i, "") || null;
+        }
+        const raw = headers["authorization"] || headers["Authorization"] || "";
         return raw.replace(/^Bearer\s+/i, "") || null;
+    }
+
+    // Extracts the Bearer token from fetch init headers or Request headers.
+    function extractAccessToken(init, request) {
+        const fromInit = extractAccessTokenFromHeaders(init && init.headers);
+        if (fromInit) return fromInit;
+        return extractAccessTokenFromHeaders(request && request.headers);
     }
 
     const nativeFetch = window.fetch.bind(window);
@@ -652,7 +659,7 @@
             }
         }
 
-        const accessToken = extractAccessToken(init);
+        const accessToken = extractAccessToken(init, request);
         const botResponse = await tryBotApiRequest(method.toUpperCase(), url, bodyText, accessToken);
         if (botResponse) return botResponse;
 

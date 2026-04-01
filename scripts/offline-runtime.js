@@ -5,6 +5,11 @@
     missingAssetPaths.delete("/chat/avatar.png");
     missingAssetPaths.delete("/chat/user.png");
     missingAssetPaths.delete("/fire-1000.png");
+    missingAssetPaths.delete("/modals/error/background.png");
+    missingAssetPaths.delete("/modals/fail/background.png");
+    missingAssetPaths.delete("/modals/free-attempts/background.png");
+    missingAssetPaths.delete("/modals/free-attempts/slots.png");
+    missingAssetPaths.delete("/modals/free-attempts/star.png");
     window.__OFFLINE_MISSING_ASSET_PATHS__ = missingAssetPaths;
 
     const noop = () => undefined;

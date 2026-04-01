@@ -122,8 +122,6 @@
             // Ignore storage failures.
         }
 
-        console.log("[HAR-CHAT] Старт. Всего:", total, "| lastSaved:", localStorage.getItem(CHAT_SEED_POSITION_KEY), "| startIdx:", startIdx);
-
         const rotated = startIdx > 0
             ? messages.slice(startIdx).concat(messages.slice(0, startIdx))
             : messages;
@@ -144,7 +142,6 @@
                         const absIdx = (startIdx + relIdx) % total;
                         try {
                             localStorage.setItem(CHAT_SEED_POSITION_KEY, String(absIdx));
-                            console.log("[HAR-CHAT] [" + relIdx + "] abs=" + absIdx + " " + target[relIdx].author + ": " + target[relIdx].text.slice(0, 40));
                         } catch (error) {
                             // Ignore storage failures.
                         }

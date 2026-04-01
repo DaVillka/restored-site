@@ -593,6 +593,46 @@
         });
     }
 
+    const BOT_API_BASE = (function () {
+        try {
+            const stored = localStorage.getItem("__HAR_BOT_URL__");
+            if (stored) return stored.replace(/\/$/, "");
+        } catch (_) {}
+        return "http://localhost:3000";
+    })();
+
+    // Forwards /api/v1/* requests to the bot server.
+    // Returns a Response on success, null if the bot is unreachable.
+    async function tryBotApiRequest(method, url, bodyText, accessToken) {
+        const isLocalApi = url.origin === window.location.origin && url.pathname.startsWith("/api/v1/");
+        const isRemoteApi = url.hostname === OFFLINE.siteHost && url.pathname.startsWith("/api/v1/");
+        if (!isLocalApi && !isRemoteApi) return null;
+
+        const botUrl = BOT_API_BASE + url.pathname + url.search;
+        const headers = { "Content-Type": "application/json" };
+        if (accessToken) headers["Authorization"] = "Bearer " + accessToken;
+
+        try {
+            const response = await nativeFetch(botUrl, {
+                method,
+                headers,
+                body: method !== "GET" && method !== "HEAD" && bodyText ? bodyText : undefined,
+            });
+            return response;
+        } catch (_) {
+            return null; // bot offline — fall through to local mock
+        }
+    }
+
+    // Extracts the Bearer token from fetch init headers.
+    function extractAccessToken(init) {
+        if (!init || !init.headers) return null;
+        const h = init.headers;
+        if (typeof h.get === "function") return (h.get("authorization") || h.get("Authorization") || "").replace(/^Bearer\s+/i, "") || null;
+        const raw = h["authorization"] || h["Authorization"] || "";
+        return raw.replace(/^Bearer\s+/i, "") || null;
+    }
+
     const nativeFetch = window.fetch.bind(window);
     window.fetch = async function offlineFetch(input, init) {
         const request = input instanceof Request ? input : null;
@@ -611,6 +651,10 @@
                 bodyText = "";
             }
         }
+
+        const accessToken = extractAccessToken(init);
+        const botResponse = await tryBotApiRequest(method.toUpperCase(), url, bodyText, accessToken);
+        if (botResponse) return botResponse;
 
         const apiMatch = matchApiRequest(method, url, bodyText);
         if (apiMatch) {

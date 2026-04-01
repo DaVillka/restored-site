@@ -32,7 +32,13 @@
       "Bash(grep -o \"useState.\\\\{0,30\\\\}\")",
       "Bash(grep -o \".\\\\{50\\\\}indexOf..home..\\\\{50\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
       "Bash(grep -o \"const S={\\\\\\(.\\\\{0,5000\\\\}\\\\\\)}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
-      "Bash(grep -o \"350_000.\\\\{0,3000\\\\}50_000\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")"
+      "Bash(grep -o \"350_000.\\\\{0,3000\\\\}50_000\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"spin\\)===\"\"attempts\"\"\\).\\\\{0,500\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \".\\\\{20\\\\}P=.\\\\{0,100\\\\}free-attempts\\\\|free-attempts.\\\\{0,200\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \".\\\\{200\\\\}free-attempts/background.\\\\{0,500\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"P=.\\\\{0,30\\\\}open\\\\|P=.\\\\{0,30\\\\}modal\\\\|,P,.\\\\{0,200\\\\}attempts\\\\|onOpen.\\\\{0,50\\\\}P\\\\b\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"attempts.\\\\{0,500\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"attempts.\\\\{0,400\\\\}\" \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")"
     ]
   }
 }

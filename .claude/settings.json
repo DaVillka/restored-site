@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(tr '}' '\\\\n')"
+      "Bash(tr '}' '\\\\n')",
+      "Bash(node -e \":*)",
+      "Bash(grep -r missing-asset.svg 'c:\\\\Users\\\\DaVilka\\\\Desktop\\\\Новая папка\\\\restored-site' --include=*.js --include=*.html --include=*.json -l)",
+      "Read(//c//**)"
     ]
   }
 }

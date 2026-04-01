@@ -9,7 +9,8 @@
       "Bash(xxd \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/fonts/google/ieVl2ZhZI2eCN5jzbjEETS9weq8-19K7DQ.woff2\")",
       "Bash(curl -A \"Mozilla/5.0\" \"https://fonts.gstatic.com/s/robotocondensed/v27/ieVl2ZhZI2eCN5jzbjEETS9weq8-19K7DQ.woff2\" -o \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/fonts/google/ieVl2ZhZI2eCN5jzbjEETS9weq8-19K7DQ.woff2\" -w \"%{http_code}\")",
       "Bash(curl -A \"Mozilla/5.0\" \"https://litenergy4.ru/favicon.ico\" -o \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/favicon.ico\" -w \"%{http_code}\")",
-      "Bash(xxd \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/favicon.ico\")"
+      "Bash(xxd \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/favicon.ico\")",
+      "Bash(grep -o '.\\\\{0,80\\\\}[,\\\\[]M[,\\\\]=\\\\|\\\\\\(M\\\\\\).\\\\{0,80\\\\}')"
     ]
   }
 }

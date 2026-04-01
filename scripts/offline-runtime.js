@@ -315,12 +315,7 @@
     }
 
     function dispatchTelegramEvent(eventType, eventData) {
-        window.dispatchEvent(
-            new MessageEvent("message", {
-                data: JSON.stringify({ eventType, eventData }),
-                source: window.parent,
-            }),
-        );
+        window.postMessage({ eventType, eventData }, "*");
     }
 
     function buildInitDataRaw() {
@@ -401,6 +396,9 @@
     window.__offlineOpenExternal = offlineOpenExternal;
     ensureLaunchHash();
 
+    if (window.TelegramWebviewProxy) {
+        console.log("[HAR] Real TelegramWebviewProxy detected, skipping mock");
+    } else
     window.TelegramWebviewProxy = {
         postEvent(eventType, eventData) {
             let payload = eventData;

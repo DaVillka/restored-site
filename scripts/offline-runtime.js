@@ -82,7 +82,7 @@
                     me: clone(OFFLINE.api.me.body),
                     stages: clone(OFFLINE.api.stages.body),
                     spinIndex: 0,
-                    spinFinished: false,
+                    lastProcessedSpinIndex: -1,
                     chatReplyIndex: 0,
                 },
             },
@@ -505,21 +505,19 @@
 
         if (routeKey === "GET /api/v1/results") {
             const spinIdx = state.spinIndex || 0;
-            const nextResult = spinSequence[spinIdx];
-            if (!nextResult || state.me.available_spins <= 0) {
+            const currentResult = spinSequence[spinIdx];
+            if (!currentResult || state.me.available_spins <= 0) {
                 return { status: 422, body: { detail: "No spins available" } };
             }
-            // Reset guard so POST /finish can process this new spin.
-            if (state.spinFinished) {
-                state.spinFinished = false;
-                persistState();
-            }
-            return { status: 200, body: clone(nextResult) };
+            // No side effects here — result stays stable until POST /finish processes it.
+            return { status: 200, body: clone(currentResult) };
         }
 
         if (routeKey === "POST /api/v1/finish") {
-            if (!state.spinFinished) {
-                const spinIdx = state.spinIndex || 0;
+            const spinIdx = state.spinIndex || 0;
+            const lastProcessed = state.lastProcessedSpinIndex !== undefined ? state.lastProcessedSpinIndex : -1;
+            // Only process once per spin index.
+            if (spinIdx > lastProcessed) {
                 const currentSpin = spinSequence[spinIdx];
                 if (currentSpin) {
                     state.me.available_spins = Math.max(0, (state.me.available_spins || 0) - 1);
@@ -528,15 +526,14 @@
                     } else if (typeof currentSpin.amount === "number" && currentSpin.amount > 0) {
                         state.me.balance = currentSpin.amount;
                     }
+                    const slotIdx = ROULETTE_SLOT_INDEX[currentSpin.spin];
+                    if (slotIdx !== undefined) {
+                        try { localStorage.setItem(ROULETTE_IDX_KEY, String(slotIdx)); } catch (e) {}
+                    }
                 }
-                state.spinFinished = true;
+                state.lastProcessedSpinIndex = spinIdx;
                 state.spinIndex = spinIdx + 1;
                 persistState();
-                // Save the roulette wheel position so it restores correctly on remount.
-                const slotIdx = ROULETTE_SLOT_INDEX[currentSpin && currentSpin.spin];
-                if (slotIdx !== undefined) {
-                    try { localStorage.setItem(ROULETTE_IDX_KEY, String(slotIdx)); } catch (e) {}
-                }
             }
             return { status: 200, body: { status: "ok" } };
         }

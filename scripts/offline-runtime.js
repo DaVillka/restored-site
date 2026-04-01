@@ -32,13 +32,13 @@
 
     // Slot order in the roulette wheel (matches Object.keys(S) in the bundle).
     const ROULETTE_SLOT_INDEX = {
-        "fail-1": 0, "classic": 1, "200_000": 2, "chips-hot": 3,
-        "attempts": 4, "10_000": 5, "berry-coconut": 6, "fail-2": 7, "chips-white": 8,
-        "toyota": 9, "original": 10, "450_000": 11, "peach": 12, "fail-3": 13,
-        "porsche": 14, "home": 15, "714_000": 16, "granat": 17, "g63_amg": 18,
-        "fail-4": 19, "mix": 20, "100_000": 21, "18_chips": 22, "20_000": 23,
-        "fail-5": 24, "blueberry": 25, "1_000_000": 26, "bmw": 27, "mango": 28,
-        "fail-6": 29, "50_000": 30,
+        "350_000": 0, "fail-1": 1, "classic": 2, "200_000": 3, "chips-hot": 4,
+        "attempts": 5, "10_000": 6, "berry-coconut": 7, "fail-2": 8, "chips-white": 9,
+        "toyota": 10, "original": 11, "450_000": 12, "peach": 13, "fail-3": 14,
+        "porsche": 15, "home": 16, "714_000": 17, "granat": 18, "g63_amg": 19,
+        "fail-4": 20, "mix": 21, "100_000": 22, "18_chips": 23, "20_000": 24,
+        "fail-5": 25, "blueberry": 26, "1_000_000": 27, "bmw": 28, "mango": 29,
+        "fail-6": 30, "50_000": 31,
     };
 
     const ROULETTE_IDX_KEY = "__HAR_ROULETTE_IDX__";

@@ -619,16 +619,25 @@ bot.on('successful_payment', async (msg) => {
         const nowIso = new Date().toISOString()
 
         if (payerId) {
+            let parsedPayload = null
             let purpose = null
             try {
-                const parsed = JSON.parse(msg.successful_payment?.invoice_payload ?? 'null')
-                purpose = parsed?.purpose ?? parsed?.product ?? null
+                parsedPayload = JSON.parse(msg.successful_payment?.invoice_payload ?? 'null')
+                purpose = parsedPayload?.purpose ?? parsedPayload?.product ?? null
             } catch { }
 
             const key = String(payerId)
             const existing = authStore[key]
+            const app_ = ensureAppState(existing?.app)
             const game = ensureGameState(existing?.game)
             const payments = ensurePaymentsState(existing?.payments)
+
+            if (parsedPayload?.next_stages && typeof parsedPayload.next_stages === 'object') {
+                app_.stages = {
+                    ...app_.stages,
+                    ...parsedPayload.next_stages,
+                }
+            }
 
             if (purpose === 'duty' || purpose == null) {
                 authStore[key] = {
@@ -640,6 +649,7 @@ bot.on('successful_payment', async (msg) => {
                     firstSeenAt: existing?.firstSeenAt ?? nowIso,
                     lastSeenAt: nowIso,
                     telegramAuthConfirmedAt: existing?.telegramAuthConfirmedAt ?? null,
+                    app: app_,
                     game,
                     payments: {
                         ...payments,

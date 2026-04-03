@@ -349,12 +349,18 @@
     var initData = getTelegramInitData();
     var storedTokenUserId = readStoredRefreshTokenUserId();
 
-    if (!user || !user.id || !initData) {
+    if (!user || !user.id) {
       return Promise.resolve(false);
     }
 
+    writeStoredRefreshToken(String(user.id));
+
+    if (!initData) {
+      return Promise.resolve(true);
+    }
+
     if (storedTokenUserId === user.id) {
-      return Promise.resolve(false);
+      return Promise.resolve(true);
     }
 
     return postJson(AUTH_LOGIN_ENDPOINT, {
@@ -409,6 +415,7 @@
     }
 
     state.knownAuthorized = true;
+    writeStoredRefreshToken(String(user.id));
     writeAuthorizedFlag(user, true);
     reportAuthorized(user);
   }

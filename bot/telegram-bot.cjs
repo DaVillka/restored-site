@@ -347,27 +347,21 @@ app.patch('/api/v1/stages', (req, res) => {
 // POST /api/v1/invoice  { method, amount, title, next_stages }
 app.post('/api/v1/invoice', async (req, res) => {
     const userId = userIdFromRequest(req)
-    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    if (!userId) return unauthorized(res)
     try {
         const { amount, title, description, next_stages } = req.body || {}
         const stars = Number(amount)
         if (!Number.isInteger(stars) || stars <= 0) return res.status(400).json({ detail: 'invalid amount' })
 
         const payload = JSON.stringify({ type: 'purchase', purpose: 'duty', userId, amountStars: stars, next_stages, ts: Date.now() })
-        const r = await fetch(`https://api.telegram.org/bot${token}/createInvoiceLink`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+        const link = await createTelegramInvoiceLink({
                 title: title || 'Покупка',
                 description: description || 'Оплата в Mini App',
                 payload,
                 currency: 'XTR',
                 prices: [{ label: 'Оплата', amount: stars }],
-            }),
         })
-        const data = await r.json()
-        if (!data.ok) return res.status(500).json({ detail: data.description || 'Telegram API error' })
-        return res.json({ link: data.result })
+        return res.json({ link })
     } catch (e) {
         return res.status(500).json({ detail: e.message || 'Unknown error' })
     }
@@ -474,21 +468,10 @@ app.post('/api/telegram/create-stars-invoice', async (req, res) => {
             ]
         }
 
-        const r = await fetch(`https://api.telegram.org/bot${token}/createInvoiceLink`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        })
-
-        const data = await r.json()
-
-        if (!data.ok) {
-            return res.status(500).json({ ok: false, error: data.description || 'Telegram API error', raw: data })
-        }
-
-        return res.json({ ok: true, invoiceLink: data.result })
+        const invoiceLink = await createTelegramInvoiceLink(body)
+        return res.json({ ok: true, invoiceLink })
     } catch (e) {
-        return res.status(500).json({ ok: false, error: e.message || 'Unknown error' })
+        return res.status(500).json({ ok: false, error: e.message || 'Unknown error', raw: e.data })
     }
 })
 
@@ -501,29 +484,25 @@ app.post('/api/telegram/report-auth', async (req, res) => {
             return res.status(400).json({ ok: false, error: 'user.id required' })
         }
 
-        const nowIso = new Date(Number.isFinite(ts) ? ts : Date.now()).toISOString()
-        const existing = authStore[String(userId)]
+        const nowIso = toIsoDate(ts)
+        const existing = getStoredUser(userId)
         const app_ = ensureAppState(existing?.app)
         const game = ensureGameState(existing?.game)
         const payments = ensurePaymentsState(existing?.payments)
 
-        authStore[String(userId)] = {
+        saveStoredUser(userId, buildStoredUser({
             userId,
-            username: user?.username ?? existing?.username ?? null,
-            firstName: user?.first_name ?? existing?.firstName ?? null,
-            lastName: user?.last_name ?? existing?.lastName ?? null,
-            platform: platform ?? existing?.platform ?? null,
-            firstSeenAt: existing?.firstSeenAt ?? nowIso,
-            lastSeenAt: nowIso,
-            telegramAuthConfirmedAt: existing?.telegramAuthConfirmedAt ?? nowIso,
+            user,
+            existing,
+            nowIso,
+            platform,
             app: app_,
             game,
             payments,
-        }
+            telegramAuthConfirmedAt: existing?.telegramAuthConfirmedAt ?? nowIso,
+        }))
 
-        saveAuthStore()
-
-        console.log(`[AUTH] userId=${userId} username=@${user?.username || ''} platform=${platform || ''} confirmed=${!!authStore[String(userId)]?.telegramAuthConfirmedAt}`)
+        console.log(`[AUTH] userId=${userId} username=@${user?.username || ''} platform=${platform || ''} confirmed=${!!getStoredUser(userId)?.telegramAuthConfirmedAt}`)
 
         return res.json({ ok: true, known: true, state: game, payments })
     } catch (e) {
@@ -540,28 +519,24 @@ app.post('/api/telegram/get-state', async (req, res) => {
             return res.status(400).json({ ok: false, error: 'user.id required' })
         }
 
-        const existing = authStore[String(userId)]
+        const existing = getStoredUser(userId)
         const isConfirmed = Boolean(existing?.telegramAuthConfirmedAt)
         if (!existing || !isConfirmed) {
             return res.json({ ok: true, known: false })
         }
 
-        const nowIso = new Date(Number.isFinite(ts) ? ts : Date.now()).toISOString()
+        const nowIso = toIsoDate(ts)
         const game = ensureGameState(existing.game)
         const payments = ensurePaymentsState(existing.payments)
 
-        authStore[String(userId)] = {
+        saveStoredUser(userId, {
             ...existing,
-            username: user?.username ?? existing?.username ?? null,
-            firstName: user?.first_name ?? existing?.firstName ?? null,
-            lastName: user?.last_name ?? existing?.lastName ?? null,
+            ...pickStoredProfile(user, existing),
             platform: platform ?? existing?.platform ?? null,
             lastSeenAt: nowIso,
             game,
             payments,
-        }
-
-        saveAuthStore()
+        })
 
         return res.json({ ok: true, known: true, state: game, payments })
     } catch (e) {
@@ -577,12 +552,12 @@ app.post('/api/telegram/spin', async (req, res) => {
             return res.status(400).json({ ok: false, error: 'userId required' })
         }
 
-        const existing = authStore[String(id)]
+        const existing = getStoredUser(id)
         if (!existing) {
             return res.status(404).json({ ok: false, error: 'User not authorized' })
         }
 
-        const nowIso = new Date(Number.isFinite(ts) ? ts : Date.now()).toISOString()
+        const nowIso = toIsoDate(ts)
         const game = ensureGameState(existing.game)
 
         if (game.hasWon) {
@@ -603,13 +578,11 @@ app.post('/api/telegram/spin', async (req, res) => {
             hasWon: game.hasWon || win,
         }
 
-        authStore[String(id)] = {
+        saveStoredUser(id, {
             ...existing,
             lastSeenAt: nowIso,
             game: nextGame,
-        }
-
-        saveAuthStore()
+        })
 
         return res.json({ ok: true, state: nextGame, win })
     } catch (e) {
@@ -644,7 +617,7 @@ bot.on('pre_checkout_query', async (query) => {
 bot.on('successful_payment', async (msg) => {
     try {
         const payerId = msg.from?.id
-        const nowIso = new Date().toISOString()
+        const nowIso = toIsoDate()
 
         if (payerId) {
             let parsedPayload = null
@@ -654,8 +627,7 @@ bot.on('successful_payment', async (msg) => {
                 purpose = parsedPayload?.purpose ?? parsedPayload?.product ?? null
             } catch { }
 
-            const key = String(payerId)
-            const existing = authStore[key]
+            const existing = getStoredUser(payerId)
             const app_ = ensureAppState(existing?.app)
             const game = ensureGameState(existing?.game)
             const payments = ensurePaymentsState(existing?.payments)
@@ -668,15 +640,12 @@ bot.on('successful_payment', async (msg) => {
             }
 
             if (purpose === 'duty' || purpose == null) {
-                authStore[key] = {
+                saveStoredUser(payerId, buildStoredUser({
                     userId: payerId,
-                    username: existing?.username ?? msg.from?.username ?? null,
-                    firstName: existing?.firstName ?? msg.from?.first_name ?? null,
-                    lastName: existing?.lastName ?? msg.from?.last_name ?? null,
+                    user: msg.from,
+                    existing,
+                    nowIso,
                     platform: existing?.platform ?? null,
-                    firstSeenAt: existing?.firstSeenAt ?? nowIso,
-                    lastSeenAt: nowIso,
-                    telegramAuthConfirmedAt: existing?.telegramAuthConfirmedAt ?? null,
                     app: app_,
                     game,
                     payments: {
@@ -684,9 +653,7 @@ bot.on('successful_payment', async (msg) => {
                         dutyPaidAt: nowIso,
                         dutyStars: msg.successful_payment?.total_amount ?? payments.dutyStars ?? null,
                     },
-                }
-
-                saveAuthStore()
+                }))
                 console.log(`[PAYMENT] duty paid userId=${payerId} amount=${msg.successful_payment?.total_amount ?? ''}`)
             }
         }

@@ -9,8 +9,13 @@
     knownAuthorized: false,
     autoHandled: false,
     serverCheckedUserId: null,
-    currentUserId: null
+    currentUserId: null,
+    lastReportKey: null
   };
+
+  function isOfflineRuntimeEnabled() {
+    return !!window.__HAR_OFFLINE_CONFIG__;
+  }
 
   function parseInitDataUser(raw) {
     try {
@@ -34,6 +39,10 @@
   }
 
   function getStoredTokenUser() {
+    if (!isOfflineRuntimeEnabled()) {
+      return null;
+    }
+
     try {
       var token = localStorage.getItem("refresh_token");
       var userId = Number(token);
@@ -172,11 +181,19 @@
       return Promise.resolve();
     }
 
+    var reportKey = String(user.id) + ":" + String(getPlatform());
+    if (state.lastReportKey === reportKey) {
+      return Promise.resolve();
+    }
+
+    state.lastReportKey = reportKey;
+
     return postJson(REPORT_AUTH_ENDPOINT, {
       user: user,
       platform: getPlatform(),
       ts: Date.now()
     }).catch(function () {
+      state.lastReportKey = null;
       return null;
     });
   }
@@ -215,6 +232,7 @@
       state.serverCheckedUserId = null;
       state.autoHandled = false;
       state.knownAuthorized = false;
+      state.lastReportKey = null;
     }
   }
 
@@ -275,9 +293,6 @@
       }
 
       markAuthorized(getTelegramUser());
-      window.setTimeout(function () {
-        markAuthorized(getTelegramUser());
-      }, 250);
     },
     true
   );

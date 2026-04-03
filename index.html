@@ -16,7 +16,16 @@
     <link rel="preload" as="image" href="loading/background.png" />
     <link rel="preload" as="image" href="loading/heading.png" />
     <link rel="preload" as="image" href="loading/cars.png" />
-    <script src="scripts/offline-runtime.js?v=20260402-1"></script>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var host = window.location.hostname;
+        var enableOffline = params.get('offline') === '1' || host === 'localhost' || host === '127.0.0.1';
+        if (enableOffline) {
+          document.write('<script src="scripts/offline-runtime.js?v=20260402-1"><\\/script>');
+        }
+      })();
+    </script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script>
       if (window.Telegram && window.Telegram.WebApp) {

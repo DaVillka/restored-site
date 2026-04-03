@@ -1,9 +1,11 @@
 (function () {
+  var AUTH_LOGIN_ENDPOINT = "/api/v1/auth/login";
   var AUTH_BUTTON_LABEL = "\u0410\u0412\u0422\u041e\u0420\u0418\u0417\u041e\u0412\u0410\u0422\u042c\u0421\u042f";
   var AUTH_STATE_ENDPOINT = "/api/telegram/get-state";
   var REPORT_AUTH_ENDPOINT = "/api/telegram/report-auth";
   var BOT_URL_STORAGE_KEY = "__HAR_BOT_URL__";
   var DEFAULT_BOT_API_BASE = window.location.origin;
+  var REFRESH_TOKEN_STORAGE_KEY = "refresh_token";
   var STORAGE_PREFIX = "__HAR_AUTHORIZED__";
   var state = {
     knownAuthorized: false,
@@ -82,6 +84,12 @@
   function getPlatform() {
     var tg = window.Telegram && window.Telegram.WebApp;
     return (tg && tg.platform) || navigator.userAgent || "unknown";
+  }
+
+  function getTelegramInitData() {
+    var tg = window.Telegram && window.Telegram.WebApp;
+    var initData = tg && tg.initData;
+    return typeof initData === "string" && initData ? initData : "";
   }
 
   function normalizeBaseUrl(value) {
@@ -247,6 +255,28 @@
     return STORAGE_PREFIX + ":" + (user && user.id ? String(user.id) : "unknown");
   }
 
+  function readStoredRefreshToken() {
+    try {
+      return localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY) || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function readStoredRefreshTokenUserId() {
+    var token = readStoredRefreshToken();
+    var userId = Number(token);
+    return Number.isInteger(userId) && userId > 0 ? userId : null;
+  }
+
+  function writeStoredRefreshToken(token) {
+    try {
+      localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, String(token || ""));
+    } catch (error) {
+      /* ignore storage failures */
+    }
+  }
+
   function readAuthorizedFlag(user) {
     try {
       return localStorage.getItem(getStorageKey(user)) === "1";
@@ -312,6 +342,43 @@
       },
       body: JSON.stringify(body)
     });
+  }
+
+  function bootstrapApiAuth() {
+    var user = getTelegramUser();
+    var initData = getTelegramInitData();
+    var storedTokenUserId = readStoredRefreshTokenUserId();
+
+    if (!user || !user.id || !initData) {
+      return Promise.resolve(false);
+    }
+
+    if (storedTokenUserId === user.id) {
+      return Promise.resolve(false);
+    }
+
+    return postJson(AUTH_LOGIN_ENDPOINT, {
+      init_data: initData
+    })
+      .then(function (response) {
+        if (!response || !response.ok) {
+          return null;
+        }
+
+        return response.json();
+      })
+      .then(function (data) {
+        var token = data && (data.refresh_token || data.access_token);
+        if (!token) {
+          return false;
+        }
+
+        writeStoredRefreshToken(token);
+        return true;
+      })
+      .catch(function () {
+        return false;
+      });
   }
 
   function reportAuthorized(user) {
@@ -447,14 +514,17 @@
 
   syncBotApiBaseStorage();
   installNetworkRewrite();
+  window.__HAR_AUTH_BOOTSTRAP__ = bootstrapApiAuth();
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", restoreAuthorizedState, { once: true });
-  } else {
-    restoreAuthorizedState();
-  }
+  window.__HAR_AUTH_BOOTSTRAP__.finally(function () {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", restoreAuthorizedState, { once: true });
+    } else {
+      restoreAuthorizedState();
+    }
 
-  window.addEventListener("load", restoreAuthorizedState, { once: true });
-  window.setTimeout(restoreAuthorizedState, 300);
-  window.setTimeout(restoreAuthorizedState, 1200);
+    window.addEventListener("load", restoreAuthorizedState, { once: true });
+    window.setTimeout(restoreAuthorizedState, 300);
+    window.setTimeout(restoreAuthorizedState, 1200);
+  });
 })();

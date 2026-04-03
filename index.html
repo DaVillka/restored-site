@@ -38,8 +38,25 @@
       }
     </script>
     <script src="scripts/runtime-config.js?v=20260403-1"></script>
-    <script src="scripts/auth-sync-patch.js?v=20260403-1"></script>
-    <script type="module" src="assets/index-klNUxud8.js"></script>
+    <script src="scripts/auth-sync-patch.js?v=20260403-2"></script>
+    <script>
+      (function () {
+        function startApp() {
+          var script = document.createElement('script');
+          script.type = 'module';
+          script.src = 'assets/index-klNUxud8.js';
+          document.head.appendChild(script);
+        }
+
+        var bootstrap = window.__HAR_AUTH_BOOTSTRAP__;
+        if (bootstrap && typeof bootstrap.then === 'function') {
+          bootstrap.catch(function () { return null; }).finally(startApp);
+          return;
+        }
+
+        startApp();
+      })();
+    </script>
     <link rel="stylesheet" href="assets/index-XXXyNkfI.css" />
   </head>
   <body class="bg-[#00EBDB]">

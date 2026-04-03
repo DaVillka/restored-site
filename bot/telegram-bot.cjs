@@ -10,6 +10,7 @@ const token = process.env.TELEGRAM_BOT_TOKEN
 const webAppUrl = process.env.TELEGRAM_WEBAPP_URL
 const promoImageUrl = process.env.TELEGRAM_PROMO_IMAGE_URL
 const port = Number(process.env.PORT || 3000)
+const TELEGRAM_API_BASE = `https://api.telegram.org/bot${token}`
 
 if (!token) process.exit(1)
 if (!webAppUrl) process.exit(1)
@@ -115,16 +116,6 @@ const SPIN_SEQUENCE = [
     { spin: '714_000',  amount: 714000 },
 ]
 
-const ROULETTE_SLOT_INDEX = {
-    '350_000': 0, 'fail-1': 1, 'classic': 2, '200_000': 3, 'chips-hot': 4,
-    'attempts': 5, '10_000': 6, 'berry-coconut': 7, 'fail-2': 8, 'chips-white': 9,
-    'toyota': 10, 'original': 11, '450_000': 12, 'peach': 13, 'fail-3': 14,
-    'porsche': 15, 'home': 16, '714_000': 17, 'granat': 18, 'g63_amg': 19,
-    'fail-4': 20, 'mix': 21, '100_000': 22, '18_chips': 23, '20_000': 24,
-    'fail-5': 25, 'blueberry': 26, '1_000_000': 27, 'bmw': 28, 'mango': 29,
-    'fail-6': 30, '50_000': 31,
-}
-
 const GIFT_EXPIRES_AT = '2026-03-26T20:12:03.391487'
 
 const INITIAL_STAGES = {
@@ -176,6 +167,80 @@ const saveAuthStore = () => {
     }
 }
 
+const unauthorized = (res) => res.status(401).json({ detail: 'unauthorized' })
+
+const getStoredUser = (userId) => authStore[String(userId)] ?? null
+
+const saveStoredUser = (userId, value) => {
+    authStore[String(userId)] = value
+    saveAuthStore()
+    return value
+}
+
+const withAuthorizedUser = (req, res, handler) => {
+    const userId = userIdFromRequest(req)
+    if (!userId) return unauthorized(res)
+
+    const storedUser = getStoredUser(userId)
+    if (!storedUser) return unauthorized(res)
+
+    return handler({ userId, storedUser })
+}
+
+const toIsoDate = (value) => new Date(Number.isFinite(value) ? value : Date.now()).toISOString()
+
+const pickStoredProfile = (user, existing) => ({
+    username: user?.username ?? existing?.username ?? null,
+    firstName: user?.first_name ?? user?.firstName ?? existing?.firstName ?? null,
+    lastName: user?.last_name ?? user?.lastName ?? existing?.lastName ?? null,
+})
+
+const buildStoredUser = ({
+    userId,
+    user,
+    existing,
+    nowIso,
+    platform,
+    app,
+    game,
+    payments,
+    telegramAuthConfirmedAt,
+}) => ({
+    userId,
+    ...pickStoredProfile(user, existing),
+    platform: platform ?? existing?.platform ?? null,
+    firstSeenAt: existing?.firstSeenAt ?? nowIso,
+    lastSeenAt: nowIso,
+    telegramAuthConfirmedAt: telegramAuthConfirmedAt ?? existing?.telegramAuthConfirmedAt ?? null,
+    app,
+    game,
+    payments,
+})
+
+const buildMeResponse = (appState) => ({
+    balance: appState.balance,
+    available_spins: appState.availableSpins,
+    gift_expires_at: GIFT_EXPIRES_AT,
+    card_number: appState.cardNumber,
+})
+
+const createTelegramInvoiceLink = async (body) => {
+    const response = await fetch(`${TELEGRAM_API_BASE}/createInvoiceLink`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    })
+
+    const data = await response.json()
+    if (!data.ok) {
+        const error = new Error(data.description || 'Telegram API error')
+        error.data = data
+        throw error
+    }
+
+    return data.result
+}
+
 // ── /api/v1/* — Mini App API backed by authStore ─────────────────────────────
 
 // POST /api/v1/auth/login  { init_data: string }
@@ -185,24 +250,18 @@ app.post('/api/v1/auth/login', (req, res) => {
     if (!user?.id) return res.status(400).json({ detail: 'invalid init_data' })
 
     const userId = Number(user.id)
-    const nowIso = new Date().toISOString()
-    const existing = authStore[String(userId)]
-    const app_ = ensureAppState(existing?.app)
-    const payments = ensurePaymentsState(existing?.payments)
+    const nowIso = toIsoDate()
+    const existing = getStoredUser(userId)
 
-    authStore[String(userId)] = {
+    saveStoredUser(userId, buildStoredUser({
         userId,
-        username: user.username ?? existing?.username ?? null,
-        firstName: user.first_name ?? existing?.firstName ?? null,
-        lastName: user.last_name ?? existing?.lastName ?? null,
-        firstSeenAt: existing?.firstSeenAt ?? nowIso,
-        lastSeenAt: nowIso,
-        telegramAuthConfirmedAt: existing?.telegramAuthConfirmedAt ?? null,
-        app: app_,
-        payments,
+        user,
+        existing,
+        nowIso,
+        app: ensureAppState(existing?.app),
         game: ensureGameState(existing?.game),
-    }
-    saveAuthStore()
+        payments: ensurePaymentsState(existing?.payments),
+    }))
 
     const token = makeToken(userId)
     return res.json({ access_token: token, refresh_token: token })
@@ -211,106 +270,78 @@ app.post('/api/v1/auth/login', (req, res) => {
 // POST /api/v1/auth/refresh
 app.post('/api/v1/auth/refresh', (req, res) => {
     const userId = userIdFromRequest(req)
-    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
+    if (!userId) return unauthorized(res)
     const token = makeToken(userId)
     return res.json({ access_token: token, refresh_token: token })
 })
 
 // GET /api/v1/me
 app.get('/api/v1/me', (req, res) => {
-    const userId = userIdFromRequest(req)
-    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
-    const u = authStore[String(userId)]
-    if (!u) return res.status(401).json({ detail: 'unauthorized' })
-    const app_ = ensureAppState(u.app)
-    return res.json({
-        balance: app_.balance,
-        available_spins: app_.availableSpins,
-        gift_expires_at: GIFT_EXPIRES_AT,
-        card_number: app_.cardNumber,
+    return withAuthorizedUser(req, res, ({ storedUser }) => {
+        const appState = ensureAppState(storedUser.app)
+        return res.json(buildMeResponse(appState))
     })
 })
 
 // PATCH /api/v1/me/card-number  { card_number: string }
 app.patch('/api/v1/me/card-number', (req, res) => {
-    const userId = userIdFromRequest(req)
-    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
-    const u = authStore[String(userId)]
-    if (!u) return res.status(401).json({ detail: 'unauthorized' })
-    const app_ = ensureAppState(u.app)
-    app_.cardNumber = String(req.body?.card_number ?? app_.cardNumber)
-    authStore[String(userId)] = { ...u, app: app_ }
-    saveAuthStore()
-    return res.json({
-        balance: app_.balance,
-        available_spins: app_.availableSpins,
-        gift_expires_at: GIFT_EXPIRES_AT,
-        card_number: app_.cardNumber,
+    return withAuthorizedUser(req, res, ({ userId, storedUser }) => {
+        const appState = ensureAppState(storedUser.app)
+        appState.cardNumber = String(req.body?.card_number ?? appState.cardNumber)
+        saveStoredUser(userId, { ...storedUser, app: appState })
+        return res.json(buildMeResponse(appState))
     })
 })
 
 // GET /api/v1/results
 app.get('/api/v1/results', (req, res) => {
-    const userId = userIdFromRequest(req)
-    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
-    const u = authStore[String(userId)]
-    if (!u) return res.status(401).json({ detail: 'unauthorized' })
-    const app_ = ensureAppState(u.app)
-    if (app_.availableSpins <= 0) return res.status(422).json({ detail: 'No spins available' })
-    const result = SPIN_SEQUENCE[app_.spinIndex] ?? SPIN_SEQUENCE[SPIN_SEQUENCE.length - 1]
-    return res.json(result)
+    return withAuthorizedUser(req, res, ({ storedUser }) => {
+        const appState = ensureAppState(storedUser.app)
+        if (appState.availableSpins <= 0) return res.status(422).json({ detail: 'No spins available' })
+        const result = SPIN_SEQUENCE[appState.spinIndex] ?? SPIN_SEQUENCE[SPIN_SEQUENCE.length - 1]
+        return res.json(result)
+    })
 })
 
 // POST /api/v1/finish
 app.post('/api/v1/finish', (req, res) => {
-    const userId = userIdFromRequest(req)
-    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
-    const u = authStore[String(userId)]
-    if (!u) return res.status(401).json({ detail: 'unauthorized' })
-    const app_ = ensureAppState(u.app)
-    const spinIdx = app_.spinIndex
-    if (spinIdx > app_.lastProcessedSpinIndex) {
-        const spin = SPIN_SEQUENCE[spinIdx] ?? null
-        if (spin) {
-            app_.availableSpins = Math.max(0, app_.availableSpins - 1)
-            if (spin.spin === 'attempts') {
-                app_.availableSpins += spin.attempts || 3
-            } else if (typeof spin.amount === 'number' && spin.amount > 0) {
-                app_.balance = spin.amount
+    return withAuthorizedUser(req, res, ({ userId, storedUser }) => {
+        const appState = ensureAppState(storedUser.app)
+        const spinIdx = appState.spinIndex
+        if (spinIdx > appState.lastProcessedSpinIndex) {
+            const spin = SPIN_SEQUENCE[spinIdx] ?? null
+            if (spin) {
+                appState.availableSpins = Math.max(0, appState.availableSpins - 1)
+                if (spin.spin === 'attempts') {
+                    appState.availableSpins += spin.attempts || 3
+                } else if (typeof spin.amount === 'number' && spin.amount > 0) {
+                    appState.balance = spin.amount
+                }
             }
-            const slotIdx = ROULETTE_SLOT_INDEX[spin.spin]
-            if (slotIdx !== undefined && !app_.rouletteIdx) {
-                app_.rouletteIdx = slotIdx
-            }
+            appState.lastProcessedSpinIndex = spinIdx
+            appState.spinIndex = spinIdx + 1
         }
-        app_.lastProcessedSpinIndex = spinIdx
-        app_.spinIndex = spinIdx + 1
-    }
-    authStore[String(userId)] = { ...u, app: app_ }
-    saveAuthStore()
-    return res.json({ status: 'ok' })
+
+        saveStoredUser(userId, { ...storedUser, app: appState })
+        return res.json({ status: 'ok' })
+    })
 })
 
 // GET /api/v1/stages
 app.get('/api/v1/stages', (req, res) => {
-    const userId = userIdFromRequest(req)
-    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
-    const u = authStore[String(userId)]
-    if (!u) return res.status(401).json({ detail: 'unauthorized' })
-    return res.json(ensureAppState(u.app).stages)
+    return withAuthorizedUser(req, res, ({ storedUser }) => {
+        return res.json(ensureAppState(storedUser.app).stages)
+    })
 })
 
 // PATCH /api/v1/stages  { <stage_name>: number, ... }
 app.patch('/api/v1/stages', (req, res) => {
-    const userId = userIdFromRequest(req)
-    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
-    const u = authStore[String(userId)]
-    if (!u) return res.status(401).json({ detail: 'unauthorized' })
-    const app_ = ensureAppState(u.app)
-    app_.stages = { ...app_.stages, ...req.body }
-    authStore[String(userId)] = { ...u, app: app_ }
-    saveAuthStore()
-    return res.json(app_.stages)
+    return withAuthorizedUser(req, res, ({ userId, storedUser }) => {
+        const appState = ensureAppState(storedUser.app)
+        appState.stages = { ...appState.stages, ...req.body }
+        saveStoredUser(userId, { ...storedUser, app: appState })
+        return res.json(appState.stages)
+    })
 })
 
 // POST /api/v1/invoice  { method, amount, title, next_stages }
@@ -344,16 +375,13 @@ app.post('/api/v1/invoice', async (req, res) => {
 
 // POST /api/v1/chat/message  { text: string }
 app.post('/api/v1/chat/message', (req, res) => {
-    const userId = userIdFromRequest(req)
-    if (!userId) return res.status(401).json({ detail: 'unauthorized' })
-    const u = authStore[String(userId)]
-    if (!u) return res.status(401).json({ detail: 'unauthorized' })
-    const app_ = ensureAppState(u.app)
-    const reply = APP_CHAT_REPLIES[app_.chatReplyIndex % APP_CHAT_REPLIES.length]
-    app_.chatReplyIndex += 1
-    authStore[String(userId)] = { ...u, app: app_ }
-    saveAuthStore()
-    return res.json({ name: reply.name, text: reply.text, color: reply.color, echo: req.body?.text || '' })
+    return withAuthorizedUser(req, res, ({ userId, storedUser }) => {
+        const appState = ensureAppState(storedUser.app)
+        const reply = APP_CHAT_REPLIES[appState.chatReplyIndex % APP_CHAT_REPLIES.length]
+        appState.chatReplyIndex += 1
+        saveStoredUser(userId, { ...storedUser, app: appState })
+        return res.json({ name: reply.name, text: reply.text, color: reply.color, echo: req.body?.text || '' })
+    })
 })
 
 const ensureMenuButton = async () => {

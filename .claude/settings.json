@@ -12,7 +12,10 @@
       "Bash(xxd \"c:/Users/DaVilka/Desktop/Новая папка/restored-site/favicon.ico\")",
       "Bash(grep -o '.\\\\{0,80\\\\}[,\\\\[]M[,\\\\]=\\\\|\\\\\\(M\\\\\\).\\\\{0,80\\\\}')",
       "Read(//c/Users/DaVilка/Desktop/Новая папка/restored-site/assets/**)",
-      "Read(//c/Users/DaVilka/Desktop/Новая папка/restored-site/**)"
+      "Read(//c/Users/DaVilka/Desktop/Новая папка/restored-site/**)",
+      "Bash(grep -o \"function [A-Z][A-Z0-9]*\\(.\\\\{0,50\\\\}\\)\\\\{.\\\\{50\\\\}Ii\\(\\).\\\\{50\\\\}\" \"/c/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \"function [A-Z][A-Z0-9]*.\\\\{0,100\\\\}Ii\\(\\).\\\\{20\\\\}data:n.\\\\{20\\\\}D4\\(\\)\" \"/c/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")",
+      "Bash(grep -o \".\\\\{200\\\\}Ii\\(\\),.data:n.=D4\\(\\)\" \"/c/Users/DaVilka/Desktop/Новая папка/restored-site/assets/index-klNUxud8.js\")"
     ]
   }
 }

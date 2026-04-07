@@ -483,7 +483,11 @@
         const body = parseRequestBody(bodyText);
         const isLocalApi = url.origin === window.location.origin && url.pathname.startsWith("/api/v1/");
         const isRemoteApi = url.hostname === OFFLINE.siteHost && url.pathname.startsWith("/api/v1/");
-        if (!isLocalApi && !isRemoteApi) {
+        const isBotRewritten = (function () {
+            const o = getBotApiOrigin();
+            return !!o && url.origin === o && url.pathname.startsWith("/api/v1/");
+        }());
+        if (!isLocalApi && !isRemoteApi && !isBotRewritten) {
             return null;
         }
 
@@ -601,12 +605,28 @@
         return "http://localhost:3000";
     })();
 
+    // Returns the origin of the configured bot URL, evaluated lazily so that
+    // runtime-config.js and auth-sync-patch.js have already run by call time.
+    function getBotApiOrigin() {
+        try {
+            const raw = (window.__HAR_BOT_URL__ || localStorage.getItem("__HAR_BOT_URL__") || "").trim().replace(/\/$/, "");
+            if (raw) return new URL(raw).origin;
+        } catch (_) {}
+        return null;
+    }
+
     // Forwards /api/v1/* requests to the bot server.
     // Returns a Response on success, null if the bot is unreachable.
     async function tryBotApiRequest(method, url, bodyText, accessToken) {
         const isLocalApi = url.origin === window.location.origin && url.pathname.startsWith("/api/v1/");
         const isRemoteApi = url.hostname === OFFLINE.siteHost && url.pathname.startsWith("/api/v1/");
-        if (!isLocalApi && !isRemoteApi) return null;
+        // Also intercept requests already rewritten to the external bot URL
+        // (auth-sync-patch.js rewrites /api/v1/* to BOT_URL before offlineFetch sees them)
+        const isBotRewritten = (function () {
+            const o = getBotApiOrigin();
+            return !!o && url.origin === o && url.pathname.startsWith("/api/v1/");
+        }());
+        if (!isLocalApi && !isRemoteApi && !isBotRewritten) return null;
 
         const botUrl = BOT_API_BASE + url.pathname + url.search;
         const headers = { "Content-Type": "application/json" };

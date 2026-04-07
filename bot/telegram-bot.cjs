@@ -595,8 +595,17 @@ app.post('/api/telegram/spin', async (req, res) => {
     }
 })
 
+// Serve the site static files from the parent directory.
+// All /api/* routes are defined above and take precedence.
+const SITE_DIR = path.join(__dirname, '..')
+app.use(express.static(SITE_DIR))
+app.get('*', (_req, res) => {
+    res.sendFile(path.join(SITE_DIR, 'index.html'))
+})
+
 app.listen(port, () => {
     console.log(`HTTP server started on :${port}`)
+    console.log(`Site: http://localhost:${port}`)
 })
 
 bot.on('message', async (msg) => {

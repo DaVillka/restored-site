@@ -599,7 +599,7 @@ app.post('/api/telegram/spin', async (req, res) => {
 // All /api/* routes are defined above and take precedence.
 const SITE_DIR = path.join(__dirname, '..')
 app.use(express.static(SITE_DIR))
-app.get('*', (_req, res) => {
+app.get('*splat', (_req, res) => {
     res.sendFile(path.join(SITE_DIR, 'index.html'))
 })
 

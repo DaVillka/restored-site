@@ -2,6 +2,7 @@
   "name": "restored-site",
   "version": "1.0.0",
   "scripts": {
+    "start": "node bot/serve.cjs",
     "bot": "node bot/telegram-bot.cjs"
   },
   "dependencies": {

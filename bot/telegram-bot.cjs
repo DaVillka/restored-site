@@ -339,6 +339,27 @@ const isInPeriod = (iso, period) => {
     return Number.isFinite(time) && time >= period.from.getTime() && time <= period.to.getTime()
 }
 
+const formatNumber = (value) => new Intl.NumberFormat('ru-RU').format(Number(value || 0))
+
+const formatDateTime = (date) => {
+    return new Intl.DateTimeFormat('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(date)
+}
+
+const stageLabels = {
+    payment_stage: 'Оплата',
+    start_chat_stage: 'Первый чат',
+    checking_stage: 'Проверка',
+    withdrawal_chat_stage: 'Чат вывода',
+    bank_commission_stage: 'Комиссия банка',
+    signature_stage: 'Подпись',
+}
+
 const getUserPaymentEvents = (user) => {
     const events = Array.isArray(user?.paymentEvents) ? user.paymentEvents : []
     if (events.length > 0) return events
@@ -379,7 +400,7 @@ const buildStatsReport = async (period) => {
 
     const purposeLines = Object.entries(byPurpose)
         .sort((a, b) => b[1].stars - a[1].stars)
-        .map(([purpose, data]) => `- ${purpose}: оплат ${data.count}, сумма ${data.stars} Stars`)
+        .map(([purpose, data]) => `• ${purpose}: ${formatNumber(data.count)} оплат / ${formatNumber(data.stars)} Stars`)
     const stageNames = Object.keys(INITIAL_STAGES)
     const stageLines = stageNames.map((stageName) => {
         const values = users
@@ -387,7 +408,8 @@ const buildStatsReport = async (period) => {
             .filter((value) => Number.isFinite(value))
         const reached = values.filter((value) => value > 0).length
         const max = values.length ? Math.max(...values) : 0
-        return `- ${stageName}: дошли ${reached}, максимум ${max}`
+        const percent = users.length ? Math.round((reached / users.length) * 100) : 0
+        return `• ${stageLabels[stageName] || stageName}: ${formatNumber(reached)} (${percent}%), max ${max}`
     })
     let currentStarsBalance = 'не удалось получить'
     try {
@@ -397,27 +419,28 @@ const buildStatsReport = async (period) => {
     }
 
     return [
-        `Статистика: ${period.label}`,
-        `Период с: ${period.from.toISOString()}`,
-        `Период до: ${period.to.toISOString()}`,
+        `📊 Статистика за ${period.label}`,
+        `${formatDateTime(period.from)} — ${formatDateTime(period.to)}`,
         '',
-        `Всего пользователей: ${users.length}`,
-        `Новых за период: ${usersSeen}`,
-        `Активных за период: ${usersActive}`,
-        `Подтвердили Telegram: ${authConfirmed}`,
+        '👥 Пользователи',
+        `Всего: ${formatNumber(users.length)}`,
+        `Новые: ${formatNumber(usersSeen)}`,
+        `Активные: ${formatNumber(usersActive)}`,
+        `Telegram подтвержден: ${formatNumber(authConfirmed)}`,
         '',
-        `Оплат за период: ${paymentEvents.length}`,
-        `Оплативших пользователей: ${paidUserIds.size}`,
-        `Stars за период: ${totalStars}`,
-        `Текущий баланс Stars бота: ${currentStarsBalance}`,
+        '⭐ Stars',
+        `Баланс бота: ${currentStarsBalance}`,
+        `Получено за период: ${formatNumber(totalStars)} Stars`,
+        `Оплат: ${formatNumber(paymentEvents.length)}`,
+        `Оплативших: ${formatNumber(paidUserIds.size)}`,
         '',
-        'Оплаты по типам:',
-        ...(purposeLines.length ? purposeLines : ['- оплат нет']),
+        '💳 Оплаты по типам',
+        ...(purposeLines.length ? purposeLines : ['• оплат нет']),
         '',
-        'Стадии:',
+        '🧭 Воронка стадий',
         ...stageLines,
         '',
-        'Формат: /stats today | yesterday | 7d | 30d | YYYY-MM-DD YYYY-MM-DD',
+        'Периоды: /stats today, /stats yesterday, /stats 7d, /stats 2026-04-01 2026-04-30',
     ].join('\n')
 }
 

@@ -309,18 +309,18 @@ const parseStatsPeriod = (text) => {
 
     if (key === 'today') {
         const from = startOfDay(now)
-        return { label: 'today', from, to: now }
+        return { label: 'сегодня', from, to: now }
     }
 
     if (key === 'yesterday') {
         const from = addDays(startOfDay(now), -1)
-        return { label: 'yesterday', from, to: startOfDay(now) }
+        return { label: 'вчера', from, to: startOfDay(now) }
     }
 
     const daysMatch = key.match(/^(\d+)d$/)
     if (daysMatch) {
         const days = Math.max(1, Number(daysMatch[1]))
-        return { label: `last ${days} days`, from: addDays(now, -days), to: now }
+        return { label: `последние ${days} дн.`, from: addDays(now, -days), to: now }
     }
 
     if (args.length >= 2) {
@@ -358,7 +358,7 @@ const getUserPaymentEvents = (user) => {
     return []
 }
 
-const buildStatsReport = (period) => {
+const buildStatsReport = async (period) => {
     const users = Object.values(authStore)
     const usersSeen = users.filter((user) => isInPeriod(user.firstSeenAt, period)).length
     const usersActive = users.filter((user) => isInPeriod(user.lastSeenAt, period)).length
@@ -379,7 +379,7 @@ const buildStatsReport = (period) => {
 
     const purposeLines = Object.entries(byPurpose)
         .sort((a, b) => b[1].stars - a[1].stars)
-        .map(([purpose, data]) => `- ${purpose}: ${data.count} payments, ${data.stars} Stars`)
+        .map(([purpose, data]) => `- ${purpose}: оплат ${data.count}, сумма ${data.stars} Stars`)
     const stageNames = Object.keys(INITIAL_STAGES)
     const stageLines = stageNames.map((stageName) => {
         const values = users
@@ -387,30 +387,37 @@ const buildStatsReport = (period) => {
             .filter((value) => Number.isFinite(value))
         const reached = values.filter((value) => value > 0).length
         const max = values.length ? Math.max(...values) : 0
-        return `- ${stageName}: ${reached} users, max ${max}`
+        return `- ${stageName}: дошли ${reached}, максимум ${max}`
     })
+    let currentStarsBalance = 'не удалось получить'
+    try {
+        currentStarsBalance = `${formatStarAmount(await getTelegramStarBalance())} Stars`
+    } catch (err) {
+        console.error('Failed to get Stars balance for stats:', err)
+    }
 
     return [
-        `Stats: ${period.label}`,
-        `From: ${period.from.toISOString()}`,
-        `To: ${period.to.toISOString()}`,
+        `Статистика: ${period.label}`,
+        `Период с: ${period.from.toISOString()}`,
+        `Период до: ${period.to.toISOString()}`,
         '',
-        `Total users: ${users.length}`,
-        `New users: ${usersSeen}`,
-        `Active users: ${usersActive}`,
-        `Confirmed auth: ${authConfirmed}`,
+        `Всего пользователей: ${users.length}`,
+        `Новых за период: ${usersSeen}`,
+        `Активных за период: ${usersActive}`,
+        `Подтвердили Telegram: ${authConfirmed}`,
         '',
-        `Payments: ${paymentEvents.length}`,
-        `Paid users: ${paidUserIds.size}`,
-        `Stars total: ${totalStars}`,
+        `Оплат за период: ${paymentEvents.length}`,
+        `Оплативших пользователей: ${paidUserIds.size}`,
+        `Stars за период: ${totalStars}`,
+        `Текущий баланс Stars бота: ${currentStarsBalance}`,
         '',
-        'By purpose:',
-        ...(purposeLines.length ? purposeLines : ['- no payments']),
+        'Оплаты по типам:',
+        ...(purposeLines.length ? purposeLines : ['- оплат нет']),
         '',
-        'Stages:',
+        'Стадии:',
         ...stageLines,
         '',
-        'Usage: /stats today | yesterday | 7d | 30d | YYYY-MM-DD YYYY-MM-DD',
+        'Формат: /stats today | yesterday | 7d | 30d | YYYY-MM-DD YYYY-MM-DD',
     ].join('\n')
 }
 
@@ -572,16 +579,16 @@ bot.onText(/\/stars/, async (msg) => {
     const userId = msg.from?.id
 
     if (adminIds.size > 0 && !adminIds.has(userId)) {
-        await bot.sendMessage(chatId, 'Access denied')
+        await bot.sendMessage(chatId, 'Доступ запрещен')
         return
     }
 
     try {
         const balance = await getTelegramStarBalance()
-        await bot.sendMessage(chatId, `Stars balance: ${formatStarAmount(balance)} Stars`)
+        await bot.sendMessage(chatId, `Баланс Stars бота: ${formatStarAmount(balance)} Stars`)
     } catch (err) {
         console.error('Failed to get Stars balance:', err)
-        await bot.sendMessage(chatId, 'Failed to get Stars balance')
+        await bot.sendMessage(chatId, 'Не удалось получить баланс Stars')
     }
 })
 
@@ -590,17 +597,17 @@ bot.onText(/\/stats(?:\s+.*)?/, async (msg) => {
     const userId = msg.from?.id
 
     if (adminIds.size > 0 && !adminIds.has(userId)) {
-        await bot.sendMessage(chatId, 'Access denied')
+        await bot.sendMessage(chatId, 'Доступ запрещен')
         return
     }
 
     const period = parseStatsPeriod(msg.text)
     if (!period) {
-        await bot.sendMessage(chatId, 'Usage: /stats today | yesterday | 7d | 30d | YYYY-MM-DD YYYY-MM-DD')
+        await bot.sendMessage(chatId, 'Формат: /stats today | yesterday | 7d | 30d | YYYY-MM-DD YYYY-MM-DD')
         return
     }
 
-    await bot.sendMessage(chatId, buildStatsReport(period))
+    await bot.sendMessage(chatId, await buildStatsReport(period))
 })
 
 bot.onText(/\/start/, async (msg) => {
@@ -894,12 +901,12 @@ bot.on('successful_payment', async (msg) => {
             const username = msg.from?.username ? `@${msg.from.username}` : '-'
             const name = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ') || '-'
             await notifyAdmins([
-                'New payment received',
-                `User: ${name}`,
+                'Получена новая оплата',
+                `Пользователь: ${name}`,
                 `Username: ${username}`,
                 `User ID: ${payerId}`,
-                `Amount: ${amount} ${currency}`,
-                `Purpose: ${purpose || '-'}`,
+                `Сумма: ${amount} ${currency}`,
+                `Тип: ${purpose || '-'}`,
                 `Payload: ${payment.invoice_payload || '-'}`,
             ].join('\n'))
         }

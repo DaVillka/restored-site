@@ -10,6 +10,12 @@ const token = process.env.TELEGRAM_BOT_TOKEN
 const webAppUrl = process.env.TELEGRAM_WEBAPP_URL
 const promoImageUrl = process.env.TELEGRAM_PROMO_IMAGE_URL
 const port = Number(process.env.PORT || 3000)
+const adminIds = new Set(
+    String(process.env.TELEGRAM_ADMIN_IDS || '')
+        .split(',')
+        .map((id) => Number(id.trim()))
+        .filter((id) => Number.isInteger(id) && id > 0)
+)
 const TELEGRAM_API_BASE = `https://api.telegram.org/bot${token}`
 
 if (!token) process.exit(1)
@@ -246,6 +252,29 @@ const createTelegramInvoiceLink = async (body) => {
     return data.result
 }
 
+const getTelegramStarBalance = async () => {
+    const response = await fetch(`${TELEGRAM_API_BASE}/getMyStarBalance`)
+    const data = await response.json()
+    if (!data.ok) {
+        const error = new Error(data.description || 'Telegram API error')
+        error.data = data
+        throw error
+    }
+
+    return data.result
+}
+
+const formatStarAmount = (balance) => {
+    const amount = Number(balance?.amount || 0)
+    const nanostarAmount = Number(balance?.nanostar_amount || 0)
+    if (!nanostarAmount) return String(amount)
+
+    const sign = amount < 0 || nanostarAmount < 0 ? '-' : ''
+    const whole = Math.abs(amount)
+    const fraction = String(Math.abs(nanostarAmount)).padStart(9, '0').replace(/0+$/, '')
+    return `${sign}${whole}.${fraction}`
+}
+
 // ── /api/v1/* — Mini App API backed by authStore ─────────────────────────────
 
 // POST /api/v1/auth/login  { init_data: string }
@@ -398,6 +427,24 @@ const ensureMenuButton = async () => {
 }
 
 void ensureMenuButton()
+
+bot.onText(/\/stars/, async (msg) => {
+    const chatId = msg.chat.id
+    const userId = msg.from?.id
+
+    if (adminIds.size > 0 && !adminIds.has(userId)) {
+        await bot.sendMessage(chatId, 'Access denied')
+        return
+    }
+
+    try {
+        const balance = await getTelegramStarBalance()
+        await bot.sendMessage(chatId, `Stars balance: ${formatStarAmount(balance)} Stars`)
+    } catch (err) {
+        console.error('Failed to get Stars balance:', err)
+        await bot.sendMessage(chatId, 'Failed to get Stars balance')
+    }
+})
 
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id

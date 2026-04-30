@@ -633,6 +633,26 @@ bot.onText(/\/stats(?:\s+.*)?/, async (msg) => {
     await bot.sendMessage(chatId, await buildStatsReport(period))
 })
 
+bot.onText(/\/wipe(?:\s+.*)?/, async (msg) => {
+    const chatId = msg.chat.id
+    const userId = msg.from?.id
+    const args = String(msg.text || '').trim().split(/\s+/).slice(1)
+
+    if (adminIds.size > 0 && !adminIds.has(userId)) {
+        await bot.sendMessage(chatId, 'Доступ запрещен')
+        return
+    }
+
+    if (args[0] !== 'confirm') {
+        await bot.sendMessage(chatId, 'Команда очистит authorized-users.json. Для подтверждения отправь: /wipe confirm')
+        return
+    }
+
+    authStore = {}
+    saveAuthStore()
+    await bot.sendMessage(chatId, 'authorized-users.json очищен')
+})
+
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id
 

@@ -215,6 +215,7 @@ const buildStoredUser = ({
     app,
     game,
     payments,
+    paymentEvents,
     telegramAuthConfirmedAt,
 }) => ({
     userId,
@@ -226,6 +227,7 @@ const buildStoredUser = ({
     app,
     game,
     payments,
+    paymentEvents: paymentEvents ?? existing?.paymentEvents ?? [],
 })
 
 const buildMeResponse = (appState) => ({
@@ -273,6 +275,143 @@ const formatStarAmount = (balance) => {
     const whole = Math.abs(amount)
     const fraction = String(Math.abs(nanostarAmount)).padStart(9, '0').replace(/0+$/, '')
     return `${sign}${whole}.${fraction}`
+}
+
+const notifyAdmins = async (text) => {
+    if (adminIds.size === 0) return
+
+    const ids = [...adminIds]
+    const results = await Promise.allSettled(ids.map((adminId) => bot.sendMessage(adminId, text)))
+
+    results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+            console.error(`Failed to notify admin ${ids[index]}:`, result.reason)
+        }
+    })
+}
+
+const startOfDay = (date) => {
+    const d = new Date(date)
+    d.setHours(0, 0, 0, 0)
+    return d
+}
+
+const addDays = (date, days) => {
+    const d = new Date(date)
+    d.setDate(d.getDate() + days)
+    return d
+}
+
+const parseStatsPeriod = (text) => {
+    const now = new Date()
+    const args = String(text || '').trim().split(/\s+/).slice(1)
+    const key = (args[0] || 'today').toLowerCase()
+
+    if (key === 'today') {
+        const from = startOfDay(now)
+        return { label: 'today', from, to: now }
+    }
+
+    if (key === 'yesterday') {
+        const from = addDays(startOfDay(now), -1)
+        return { label: 'yesterday', from, to: startOfDay(now) }
+    }
+
+    const daysMatch = key.match(/^(\d+)d$/)
+    if (daysMatch) {
+        const days = Math.max(1, Number(daysMatch[1]))
+        return { label: `last ${days} days`, from: addDays(now, -days), to: now }
+    }
+
+    if (args.length >= 2) {
+        const from = new Date(`${args[0]}T00:00:00`)
+        const to = new Date(`${args[1]}T23:59:59.999`)
+        if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime())) {
+            return { label: `${args[0]} - ${args[1]}`, from, to }
+        }
+    }
+
+    return null
+}
+
+const isInPeriod = (iso, period) => {
+    const time = Date.parse(iso)
+    return Number.isFinite(time) && time >= period.from.getTime() && time <= period.to.getTime()
+}
+
+const getUserPaymentEvents = (user) => {
+    const events = Array.isArray(user?.paymentEvents) ? user.paymentEvents : []
+    if (events.length > 0) return events
+
+    const legacyPaidAt = user?.payments?.dutyPaidAt
+    const legacyStars = user?.payments?.dutyStars
+    if (typeof legacyPaidAt === 'string' && Number.isFinite(Number(legacyStars))) {
+        return [{
+            paidAt: legacyPaidAt,
+            amount: Number(legacyStars),
+            currency: 'XTR',
+            purpose: 'duty',
+            legacy: true,
+        }]
+    }
+
+    return []
+}
+
+const buildStatsReport = (period) => {
+    const users = Object.values(authStore)
+    const usersSeen = users.filter((user) => isInPeriod(user.firstSeenAt, period)).length
+    const usersActive = users.filter((user) => isInPeriod(user.lastSeenAt, period)).length
+    const authConfirmed = users.filter((user) => isInPeriod(user.telegramAuthConfirmedAt, period)).length
+    const paymentEvents = users.flatMap((user) =>
+        getUserPaymentEvents(user).map((payment) => ({ ...payment, user }))
+    ).filter((payment) => isInPeriod(payment.paidAt, period))
+
+    const paidUserIds = new Set(paymentEvents.map((payment) => String(payment.user.userId)))
+    const totalStars = paymentEvents.reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+    const byPurpose = paymentEvents.reduce((acc, payment) => {
+        const purpose = payment.purpose || '-'
+        if (!acc[purpose]) acc[purpose] = { count: 0, stars: 0 }
+        acc[purpose].count += 1
+        acc[purpose].stars += Number(payment.amount || 0)
+        return acc
+    }, {})
+
+    const purposeLines = Object.entries(byPurpose)
+        .sort((a, b) => b[1].stars - a[1].stars)
+        .map(([purpose, data]) => `- ${purpose}: ${data.count} payments, ${data.stars} Stars`)
+    const stageNames = Object.keys(INITIAL_STAGES)
+    const stageLines = stageNames.map((stageName) => {
+        const values = users
+            .map((user) => Number(user?.app?.stages?.[stageName] || 0))
+            .filter((value) => Number.isFinite(value))
+        const reached = values.filter((value) => value > 0).length
+        const max = values.length ? Math.max(...values) : 0
+        return `- ${stageName}: ${reached} users, max ${max}`
+    })
+
+    return [
+        `Stats: ${period.label}`,
+        `From: ${period.from.toISOString()}`,
+        `To: ${period.to.toISOString()}`,
+        '',
+        `Total users: ${users.length}`,
+        `New users: ${usersSeen}`,
+        `Active users: ${usersActive}`,
+        `Confirmed auth: ${authConfirmed}`,
+        '',
+        `Payments: ${paymentEvents.length}`,
+        `Paid users: ${paidUserIds.size}`,
+        `Stars total: ${totalStars}`,
+        '',
+        'By purpose:',
+        ...(purposeLines.length ? purposeLines : ['- no payments']),
+        '',
+        'Stages:',
+        ...stageLines,
+        '',
+        'Usage: /stats today | yesterday | 7d | 30d | YYYY-MM-DD YYYY-MM-DD',
+    ].join('\n')
 }
 
 // ── /api/v1/* — Mini App API backed by authStore ─────────────────────────────
@@ -444,6 +583,24 @@ bot.onText(/\/stars/, async (msg) => {
         console.error('Failed to get Stars balance:', err)
         await bot.sendMessage(chatId, 'Failed to get Stars balance')
     }
+})
+
+bot.onText(/\/stats(?:\s+.*)?/, async (msg) => {
+    const chatId = msg.chat.id
+    const userId = msg.from?.id
+
+    if (adminIds.size > 0 && !adminIds.has(userId)) {
+        await bot.sendMessage(chatId, 'Access denied')
+        return
+    }
+
+    const period = parseStatsPeriod(msg.text)
+    if (!period) {
+        await bot.sendMessage(chatId, 'Usage: /stats today | yesterday | 7d | 30d | YYYY-MM-DD YYYY-MM-DD')
+        return
+    }
+
+    await bot.sendMessage(chatId, buildStatsReport(period))
 })
 
 bot.onText(/\/start/, async (msg) => {
@@ -692,6 +849,18 @@ bot.on('successful_payment', async (msg) => {
             const app_ = ensureAppState(existing?.app)
             const game = ensureGameState(existing?.game)
             const payments = ensurePaymentsState(existing?.payments)
+            const payment = msg.successful_payment || {}
+            const amount = payment.total_amount ?? ''
+            const currency = payment.currency || ''
+            const paymentEvent = {
+                paidAt: nowIso,
+                amount: Number(amount) || 0,
+                currency,
+                purpose: purpose || null,
+                telegramPaymentChargeId: payment.telegram_payment_charge_id || null,
+                providerPaymentChargeId: payment.provider_payment_charge_id || null,
+                invoicePayload: payment.invoice_payload || null,
+            }
 
             if (parsedPayload?.next_stages && typeof parsedPayload.next_stages === 'object') {
                 app_.stages = {
@@ -712,11 +881,27 @@ bot.on('successful_payment', async (msg) => {
                     payments: {
                         ...payments,
                         dutyPaidAt: nowIso,
-                        dutyStars: msg.successful_payment?.total_amount ?? payments.dutyStars ?? null,
+                        dutyStars: payment.total_amount ?? payments.dutyStars ?? null,
                     },
+                    paymentEvents: [
+                        ...(Array.isArray(existing?.paymentEvents) ? existing.paymentEvents : []),
+                        paymentEvent,
+                    ],
                 }))
-                console.log(`[PAYMENT] duty paid userId=${payerId} amount=${msg.successful_payment?.total_amount ?? ''}`)
+                console.log(`[PAYMENT] duty paid userId=${payerId} amount=${payment.total_amount ?? ''}`)
             }
+
+            const username = msg.from?.username ? `@${msg.from.username}` : '-'
+            const name = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ') || '-'
+            await notifyAdmins([
+                'New payment received',
+                `User: ${name}`,
+                `Username: ${username}`,
+                `User ID: ${payerId}`,
+                `Amount: ${amount} ${currency}`,
+                `Purpose: ${purpose || '-'}`,
+                `Payload: ${payment.invoice_payload || '-'}`,
+            ].join('\n'))
         }
 
         await bot.sendMessage(msg.chat.id, 'Оплата прошла успешно ✅')
